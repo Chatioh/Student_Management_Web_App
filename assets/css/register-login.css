@@ -1,0 +1,213 @@
+:root { 
+    --specialpurple-color: #5D23FF; 
+    --specialgreen-color: #79C8E2; 
+    --background-color: #ffffff; /* Background color for the entire website, including individual sections */
+    --transparentblue-color: #000c35ea; /* Background color for the transparent blue website sections */
+    --default-color: #212529; /* Default color used for the majority of the text content across the entire website */
+    --heading-color: #6c5ce7; /* Color for headings, subheadings and title throughout the website */
+    --accent-color: #0d42ff; /* Accent color that represents your brand on the website. It's used for buttons, links, and other elements that need to stand out */
+    --surface-color: #ffffff; /* The surface color is used as a background of boxed elements within sections, such as cards, icon boxes, or other elements that require a visual separation from the global background. */
+    --contrast-color: #ffffff; /* Contrast color for text, ensuring readability against backgrounds of accent, heading, or default colors. */
+    --grey-color: #cecece;
+    --light-blue: #dfefff ;
+}
+body {
+    padding: 40px 20px;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #f0f2f5;
+}
+
+.main-container {
+    max-width: 1200px;
+    width: 100%;
+    height: 600px;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+.logo {
+    font-size: 28px;
+    color: var(--accent-color);
+    margin-bottom: 20px;
+}
+
+.carousel-side {
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    background-image: url(../img/students_in_class.png);
+    background-position: center ;
+    background-repeat: no-repeat;
+    background-size: cover;
+}
+
+.carousel-dim{
+    position: absolute;
+    padding: 40px;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--transparentblue-color);
+}
+.carousel-title {
+    font-size: 32px;
+    font-weight: bold;
+    margin-bottom: 15px;
+}
+
+.carousel-text {
+    font-size: 16px;
+    margin-bottom: 30px;
+}
+
+.carousel-images {
+    display: flex;
+    justify-content: center;
+    margin: 60px 0;
+}
+
+.carousel-image {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    overflow: hidden;
+    margin: 0 10px;
+    border: 3px solid white;
+}
+
+.carousel-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.carousel-indicators {
+    display: flex;
+    justify-content: center;
+    gap: 5px;
+    margin-top: auto;
+}
+
+.carousel-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+}
+
+.carousel-indicator.active {
+    background-color: white;
+    width: 20px;
+    border-radius: 5px;
+}
+
+.login-side {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background-color: white;
+    height: 100%;
+}
+
+.login-form {
+    padding: 20px;
+    max-width: 500px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.form-title {
+    font-size: 38px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: var(--heading-color);
+}
+
+.form-paragraph {
+    margin-bottom: 20px;
+}
+
+.form-label {
+    font-weight: 500;
+    margin-bottom: 5px;
+}
+
+.form-control py-2 {
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #ced4da;
+    margin-bottom: 20px;
+}
+
+.sign-up-btn {
+    background-color: var(--accent-color);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 12px;
+    font-weight: 500;
+    width: 100%;
+    margin-top: 10px;
+    transition: transform 0.2s ease, background-color 0s ease;
+}
+
+.sign-up-btn:hover {
+    transform: scale(1.001);
+    background: linear-gradient(45deg, var(--specialgreen-color) 0%, var(--specialpurple-color) 100%);
+}
+
+.divider {
+    text-align: center;
+    margin: 20px 0;
+    color: #6c757d;
+}
+
+.social-btns {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.social-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #dee2e6;
+    background-color: white;
+    font-size: 18px;
+}
+
+.google-btn { color: #DB4437; }
+.twitter-btn { color: #1DA1F2; }
+.facebook-btn { color: #4267B2; }
+
+.signin-link {
+    text-align: center;
+    margin-top: 20px;
+}
+
+.signin-link a {
+    color: var(--accent-color);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+@media (max-width: 767.98px) {
+    .carousel-side {
+        display: none;
+    }
+    
+    .main-container {
+        height: auto;
+    }
+}

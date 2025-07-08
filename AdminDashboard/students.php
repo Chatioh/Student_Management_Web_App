@@ -12,22 +12,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (isset($_POST['action'])) {
             switch ($_POST['action']) {
                 case 'create':
-                    $stmt = $pdo->prepare("
-                        INSERT INTO students (matricule, full_name, email, phone_number, password, school_id, department_name) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ");
-                    $stmt->execute([
-                        $_POST['matricule'],
-                        $_POST['full_name'],
-                        $_POST['email'],
-                        $_POST['phone_number'],
-                        password_hash($_POST['password'], PASSWORD_DEFAULT),
-                        $_POST['school_id'],
-                        $_POST['department_name']
-                    ]);
-                    $message = 'Student created successfully!';
-                    $message_type = 'success';
-                    break;
+                // Insert student
+                $stmt = $pdo->prepare("
+                    INSERT INTO students (matricule, full_name, email, phone_number, password, school_id, department_name) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([
+                    $_POST['matricule'],
+                    $_POST['full_name'],
+                    $_POST['email'],
+                    $_POST['phone_number'],
+                    password_hash($_POST['password'], PASSWORD_DEFAULT),
+                    $_POST['school_id'],
+                    $_POST['department_name']
+                ]);
+                
+                $student_id = $pdo->lastInsertId();
+                
+                // Auto-enroll in department courses if department is selected
+                if (!empty($_POST['department_name'])) {
+                    $course_stmt = $pdo->prepare("SELECT id FROM courses WHERE department_id = ?");
+                    $course_stmt->execute([$_POST['department_name']]);
+                    $courses = $course_stmt->fetchAll();
+                    
+                    foreach ($courses as $course) {
+                        $enroll_stmt = $pdo->prepare("INSERT INTO enrollments (student_id, course_id) VALUES (?, ?)");
+                        $enroll_stmt->execute([$student_id, $course['id']]);
+                    }
+                }
+                
+                $message = 'Student created successfully!';
+                $message_type = 'success';
+                break;
                     
                 case 'update':
                     $stmt = $pdo->prepare("
@@ -132,9 +148,14 @@ include 'includes/header.php';
         <h2 class="mb-1">Students Management</h2>
         <p class="text-muted mb-0">Manage student records, enrollments, and information</p>
     </div>
-    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#studentModal" onclick="openCreateModal()">
-        <i class="fas fa-plus me-2"></i>Add Student
-    </button>
+    <div class="btn-group" role="group">
+        <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#matriculeModal" onclick="openMatriculeModal()">
+            <i class="fas fa-id-card me-2"></i>Add Matricule
+        </button>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#studentModal" onclick="openCreateModal()">
+            <i class="fas fa-plus me-2"></i>Add Student
+        </button>
+    </div>
 </div>
 
 <!-- Filters and Search -->
@@ -365,6 +386,34 @@ include 'includes/header.php';
         </div>
     </div>
 </div>
+<!-- Matricule Modal -->
+<div class="modal fade" id="matriculeModal" tabindex="-1" aria-labelledby="matriculeModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="matriculeModalLabel">
+                    <i class="fas fa-id-card me-2"></i>Add Matricule
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="matriculeForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="new_matricule" class="form-label">Matricule Number *</label>
+                        <input type="text" class="form-control" id="new_matricule" name="matricule" required>
+                        <div class="form-text">This matricule will be available for student registration</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i>Add Matricule
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 <!-- Delete Confirmation Modal -->
 <div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
@@ -395,6 +444,56 @@ include 'includes/header.php';
 </div>
 
 <script>
+function openMatriculeModal() {
+    document.getElementById('matriculeForm').reset();
+}
+
+// Handle matricule form submission
+document.getElementById('matriculeForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    fetch('add_matricule.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showSuccessMessage('Matricule added successfully!');
+            bootstrap.Modal.getInstance(document.getElementById('matriculeModal')).hide();
+            location.reload(); // Refresh to show updated data
+        } else {
+            showErrorMessage(data.message || 'Error adding matricule');
+        }
+    })
+    .catch(error => {
+        showErrorMessage('Error: ' + error.message);
+    });
+});
+
+function showSuccessMessage(message) {
+    // Create and show success alert
+    const alertDiv = document.createElement('div');
+    alertDiv.className = 'alert alert-success alert-dismissible fade show';
+    alertDiv.innerHTML = `
+        <i class="fas fa-check-circle me-2"></i>${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.querySelector('.container-fluid').insertBefore(alertDiv, document.querySelector('.container-fluid').firstChild);
+}
+
+function showErrorMessage(message) {
+    // Create and show error alert
+    const alertDiv = document.createElement('div');
+    alertDiv.className = 'alert alert-danger alert-dismissible fade show';
+    alertDiv.innerHTML = `
+        <i class="fas fa-exclamation-circle me-2"></i>${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.querySelector('.container-fluid').insertBefore(alertDiv, document.querySelector('.container-fluid').firstChild);
+}
 function openCreateModal() {
     document.getElementById('studentModalLabel').innerHTML = '<i class="fas fa-user-plus me-2"></i>Add Student';
     document.getElementById('formAction').value = 'create';

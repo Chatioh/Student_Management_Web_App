@@ -254,6 +254,7 @@ body {
 /* Tables */
 .table-responsive {
     border-radius: 12px;
+    width: 100%;
     overflow-x: auto; /* Enable horizontal scrolling */
     -webkit-overflow-scrolling: touch; /* For smooth scrolling on iOS */
     overflow-y: hidden; /* Prevent vertical scrollbar unless needed */

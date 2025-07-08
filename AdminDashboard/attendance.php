@@ -571,7 +571,7 @@ function displayStudents(students) {
     let html = '';
     students.forEach(student => {
         html += `
-            <div class="col-md-6 col-lg-4">
+            <div class="col-md-12 col-lg-6">
                 <div class="card">
                     <div class="card-body p-3">
                         <div class="d-flex align-items-center">

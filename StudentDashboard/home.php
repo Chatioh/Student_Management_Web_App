@@ -1,3 +1,11 @@
+<?php
+session_start();
+$show_success = false;
+if (isset($_SESSION['registration_success']) && $_SESSION['registration_success'] === true) {
+    $show_success = true;
+    unset($_SESSION['registration_success']); // Clear the flag
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,6 +13,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Student Management Dashboard</title>
     <link href="assets/bootstrap-5.3.3/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <link href="assets/libs/fontawesome-free-6.7.2-web/css/all.min.css" rel="stylesheet">
     <!-- <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"> -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.css" rel="stylesheet">
@@ -54,7 +64,6 @@
             </a>
         </div>
     </nav>
-
     <!-- Main Content -->
     <main class="main-content px-0" id="mainContent">
         <div class="container-fluid">
@@ -72,6 +81,14 @@
                       <div class="user-avatar ms-2">J</div>
                   </div>
               </div>
+              <!-- Add this after the top-bar div -->
+                <?php if ($show_success): ?>
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="fas fa-check-circle me-2"></i>
+                    <strong>Welcome!</strong> Your registration was successful. You are now enrolled in your department courses.
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                <?php endif; ?>
   
               <!-- Welcome Card -->
               <div class="welcome-card">

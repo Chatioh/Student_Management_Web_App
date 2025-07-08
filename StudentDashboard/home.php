@@ -1,9 +1,10 @@
 <?php
 session_start();
-$show_success = false;
-if (isset($_SESSION['registration_success']) && $_SESSION['registration_success'] === true) {
-    $show_success = true;
-    unset($_SESSION['registration_success']); // Clear the flag
+
+$display_message = "";
+if (isset($_SESSION["display_message"])) {
+    $display_message = $_SESSION["display_message"];
+    unset($_SESSION["display_message"]); // Clear the message after displaying
 }
 ?>
 <!DOCTYPE html>
@@ -64,6 +65,7 @@ if (isset($_SESSION['registration_success']) && $_SESSION['registration_success'
             </a>
         </div>
     </nav>
+
     <!-- Main Content -->
     <main class="main-content px-0" id="mainContent">
         <div class="container-fluid">
@@ -81,14 +83,12 @@ if (isset($_SESSION['registration_success']) && $_SESSION['registration_success'
                       <div class="user-avatar ms-2">J</div>
                   </div>
               </div>
-              <!-- Add this after the top-bar div -->
-                <?php if ($show_success): ?>
+              <?php if (!empty($display_message)): ?>
                 <div class="alert alert-success alert-dismissible fade show" role="alert">
-                    <i class="fas fa-check-circle me-2"></i>
-                    <strong>Welcome!</strong> Your registration was successful. You are now enrolled in your department courses.
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    <?php echo $display_message; ?>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
-                <?php endif; ?>
+              <?php endif; ?>
   
               <!-- Welcome Card -->
               <div class="welcome-card">

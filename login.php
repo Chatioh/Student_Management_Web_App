@@ -87,6 +87,11 @@ if($_SERVER["REQUEST_METHOD"] == "POST"){
     // Close connection
     mysqli_close($link);
 }
+// Check for registration success message from register.php
+if(isset($_SESSION["registration_success"])) {
+    $_SESSION["display_message"] = $_SESSION["registration_success"];
+    unset($_SESSION["registration_success"]);
+}
 ?>
 
 <!DOCTYPE html>

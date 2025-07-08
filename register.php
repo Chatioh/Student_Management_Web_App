@@ -188,7 +188,7 @@ if($_SERVER["REQUEST_METHOD"] == "POST"){
                 }
 
                 // Redirect to login page with success message
-                $_SESSION["registration_success"] = "Registration successful! Please log in.";
+                $_SESSION["registration_success"] = "You have been successfully Admitted! Welcome to SMA, your student journey begins now.";
                 header("location: login.php");
                 exit();
             } else{

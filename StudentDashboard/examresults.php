@@ -1,13 +1,102 @@
+<?php
+session_start();
+require_once "config.php";
+
+// Check if the user is logged in, if not then redirect to login page
+if(!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true){
+    header("location: ../login.php");
+    exit;
+}
+
+$student_id = $_SESSION["student_id"];
+
+// Get student data for profile icon
+$student_data = [];
+$sql = "SELECT full_name FROM students WHERE id = ?";
+if ($stmt = mysqli_prepare($link, $sql)) {
+    mysqli_stmt_bind_param($stmt, "i", $student_id);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    $student_data = mysqli_fetch_assoc($result);
+    mysqli_stmt_close($stmt);
+}
+
+// Get exam results by semester for the logged-in student
+$first_semester_results = [];
+$second_semester_results = [];
+
+$sql = "SELECT c.id, c.code, c.name, c.credit_hours, c.semester, 
+               er.ca_mark, er.exam_mark, er.total_score, er.exam_type,
+               CASE 
+                   WHEN er.total_score >= 90 THEN 'A'
+                   WHEN er.total_score >= 80 THEN 'B'
+                   WHEN er.total_score >= 70 THEN 'C'
+                   WHEN er.total_score >= 60 THEN 'D'
+                   ELSE 'F'
+               END as letter_grade,
+               er.graded_at
+        FROM enrollments e
+        JOIN courses c ON e.course_id = c.id
+        LEFT JOIN exam_results er ON er.enrollment_id = e.id
+        WHERE e.student_id = ?
+        ORDER BY c.semester, c.code";
+
+if ($stmt = mysqli_prepare($link, $sql)) {
+    mysqli_stmt_bind_param($stmt, "i", $student_id);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    
+    while ($row = mysqli_fetch_assoc($result)) {
+        if ($row['semester'] == 'First Semester') {
+            $first_semester_results[] = $row;
+        } else if ($row['semester'] == 'Second Semester') {
+            $second_semester_results[] = $row;
+        }
+    }
+    mysqli_stmt_close($stmt);
+}
+
+// Calculate GPA and statistics
+function calculateGPA($results) {
+    $total_points = 0;
+    $total_credits = 0;
+    $graded_courses = 0;
+    
+    foreach ($results as $result) {
+        if ($result['total_score'] !== null && $result['total_score'] > 0) {
+            $grade_points = 0;
+            if ($result['total_score'] >= 90) $grade_points = 4.0;
+            elseif ($result['total_score'] >= 80) $grade_points = 3.0;
+            elseif ($result['total_score'] >= 70) $grade_points = 2.0;
+            elseif ($result['total_score'] >= 60) $grade_points = 1.0;
+            
+            $total_points += $grade_points * $result['credit_hours'];
+            $total_credits += $result['credit_hours'];
+            $graded_courses++;
+        }
+    }
+    
+    return [
+        'gpa' => $total_credits > 0 ? $total_points / $total_credits : 0,
+        'total_credits' => $total_credits,
+        'graded_courses' => $graded_courses,
+        'total_courses' => count($results),
+        'avg_score' => count($results) > 0 ? array_sum(array_column($results, 'total_score')) / count($results) : 0
+    ];
+}
+
+$first_sem_stats = calculateGPA($first_semester_results);
+$second_sem_stats = calculateGPA($second_semester_results);
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Management Dashboard</title>
+    <title>Exam Results - Student Management Dashboard</title>
     <link href="assets/bootstrap-5.3.3/css/bootstrap.min.css" rel="stylesheet">
     <link href="assets/libs/fontawesome-free-6.7.2-web/css/all.min.css" rel="stylesheet">
-    <!-- <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"> -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <link rel="stylesheet" href="assets/css/courses.css">
 </head>
 <body>
@@ -33,7 +122,7 @@
                 Exam Results 
                 <i class="fas fa-chevron-right ms-auto"></i>
             </a>
-            <a href="" class="nav-link">
+            <a href="notifications.php" class="nav-link">
                 <i class="fas fa-bell"></i>
                 Notifications 
                 <i class="fas fa-chevron-right ms-auto"></i>
@@ -47,9 +136,14 @@
                 Settings
                 <i class="fas fa-chevron-right ms-auto"></i>
             </a>
-            <a href="#" class="nav-link">
+            <a href="profile.php" class="nav-link">
                 <i class="fas fa-user-alt"></i>
                 Profile
+                <i class="fas fa-chevron-right ms-auto"></i>
+            </a>
+            <a href="#" class="nav-link" onclick="showLogoutModal()">
+                <i class="fas fa-sign-out-alt"></i>
+                Logout
                 <i class="fas fa-chevron-right ms-auto"></i>
             </a>
         </div>
@@ -69,469 +163,232 @@
                           <i class="fas fa-search"></i>
                           <input type="text" class="form-control" placeholder="Search...">
                       </div>
-                      <div class="user-avatar ms-2">J</div>
+                      <div class="user-avatar ms-2"><?php echo strtoupper(substr($student_data["full_name"], 0, 1)); ?></div>
                   </div>
               </div>
 
               <div class="progress-grid row">
-                <!-- Course Progress Card -->
-                <div class="col-lg-12 d-grid row-gap-3 py-2">
+                <!-- First Semester Results Card -->
+                <div class="col-lg-6 d-grid row-gap-3 py-2">
                     <div class="chart-container course-progress-container m-0">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h5 class="mb-0">First Semester Results</h5>
-                            <span class="badge bg-primary">4 Active Courses</span>
+                            <span class="badge bg-primary"><?php echo $first_sem_stats['total_courses']; ?> Courses</span>
                         </div>
                         
-                        <!-- Scrollable Course List -->
+                        <!-- Scrollable Results List -->
                         <div class="courses-scroll-container">
-                            <!-- Course Item 1 -->
-                            <div class="course-item mb-3">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <div class="d-flex align-items-center">
-                                    <div class="course-icon me-3">
-                                        <i class="fas fa-laptop-code"></i>
+                            <?php if (!empty($first_semester_results)): ?>
+                                <?php foreach ($first_semester_results as $result): ?>
+                                    <div class="course-item mb-3">
+                                        <div class="d-flex justify-content-between align-items-start mb-2">
+                                            <div class="d-flex align-items-center">
+                                                <div class="course-icon me-3">
+                                                    <i class="fas fa-chart-bar"></i>
+                                                </div>
+                                                <div>
+                                                    <h6 class="mb-1"><?php echo htmlspecialchars($result['name']); ?></h6>
+                                                    <small class="text-muted"><?php echo htmlspecialchars($result['code']); ?> • <?php echo $result['credit_hours']; ?> Credits</small>
+                                                </div>
+                                            </div>
+                                            <div class="text-end">
+                                                <span class="grade-badge grade-<?php echo strtolower($result['letter_grade']); ?>">
+                                                    <?php echo $result['letter_grade']; ?>
+                                                </span>
+                                                <div class="course-percentage"><?php echo $result['total_score'] ?? 'N/A'; ?>%</div>
+                                            </div>
+                                        </div>
+                                        
+                                        <?php if ($result['total_score']): ?>
+                                            <div class="progress custom-course-progress mb-2">
+                                                <div class="progress-bar <?php echo $result['total_score'] >= 70 ? 'bg-success' : ($result['total_score'] >= 60 ? 'bg-warning' : 'bg-danger'); ?>" 
+                                                    role="progressbar" 
+                                                    style="width: <?php echo min($result['total_score'], 100); ?>%" 
+                                                    aria-valuenow="<?php echo $result['total_score']; ?>" 
+                                                    aria-valuemin="0" 
+                                                    aria-valuemax="100">
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="row mb-2">
+                                                <div class="col-6">
+                                                    <small class="text-muted">CA: <?php echo $result['ca_mark'] ?? 'N/A'; ?>%</small>
+                                                </div>
+                                                <div class="col-6">
+                                                    <small class="text-muted">Exam: <?php echo $result['exam_mark'] ?? 'N/A'; ?>%</small>
+                                                </div>
+                                            </div>
+                                        <?php endif; ?>
+                                        
+                                        <div class="d-flex justify-content-between">
+                                            <small class="text-muted">
+                                                <?php echo $result['exam_type'] ?? 'Final'; ?> Exam
+                                            </small>
+                                            <small class="<?php echo ($result['total_score'] ?? 0) >= 70 ? 'text-success' : (($result['total_score'] ?? 0) >= 60 ? 'text-warning' : 'text-danger'); ?>">
+                                                <?php 
+                                                if ($result['total_score']) {
+                                                    echo $result['total_score'] >= 70 ? 'Passed' : ($result['total_score'] >= 60 ? 'Needs Improvement' : 'Failed');
+                                                } else {
+                                                    echo 'Pending';
+                                                }
+                                                ?>
+                                            </small>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <h6 class="mb-1">Web Development</h6>
-                                        <small class="text-muted">CS-301 • Prof. Johnson</small>
-                                    </div>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <div class="text-center py-4">
+                                    <i class="fas fa-chart-bar fa-3x text-muted mb-3"></i>
+                                    <p class="text-muted">No exam results available for first semester</p>
                                 </div>
-                                <div class="text-end">
-                                    <span class="grade-badge grade-a">A</span>
-                                    <div class="course-percentage">92%</div>
-                                </div>
-                            </div>
-                            <div class="progress custom-course-progress mb-2">
-                                <div class="progress-bar bg-success" 
-                                    role="progressbar" 
-                                    style="width: 92%" 
-                                    aria-valuenow="92" 
-                                    aria-valuemin="0" 
-                                    aria-valuemax="100">
-                                </div>
-                            </div>
-                            <div class="d-flex justify-content-between">
-                                <small class="text-muted">12/13 modules completed</small>
-                                <small class="text-success">Next: Final Project</small>
-                            </div>
+                            <?php endif; ?>
                         </div>
 
-                        <!-- Course Item 2 -->
-                        <div class="course-item mb-4">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <div class="d-flex align-items-center">
-                                    <div class="course-icon me-3">
-                                        <i class="fas fa-database"></i>
-                                    </div>
-                                    <div>
-                                        <h6 class="mb-1">Database Systems</h6>
-                                        <small class="text-muted">CS-205 • Prof. Smith</small>
-                                    </div>
-                                </div>
-                                <div class="text-end">
-                                    <span class="grade-badge grade-b">B+</span>
-                                    <div class="course-percentage">78%</div>
-                                </div>
-                            </div>
-                            <div class="progress custom-course-progress mb-2">
-                                <div class="progress-bar bg-primary" 
-                                    role="progressbar" 
-                                    style="width: 78%" 
-                                    aria-valuenow="78" 
-                                    aria-valuemin="0" 
-                                    aria-valuemax="100">
-                                </div>
-                            </div>
-                            <div class="d-flex justify-content-between">
-                                <small class="text-muted">9/12 modules completed</small>
-                                <small class="text-warning">Due: Assignment 3</small>
-                            </div>
-                        </div>
-
-                        <!-- Course Item 3 -->
-                        <div class="course-item mb-4">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <div class="d-flex align-items-center">
-                                    <div class="course-icon me-3">
-                                        <i class="fas fa-chart-line"></i>
-                                    </div>
-                                    <div>
-                                        <h6 class="mb-1">Data Analytics</h6>
-                                        <small class="text-muted">MATH-401 • Prof. Wilson</small>
-                                    </div>
-                                </div>
-                                <div class="text-end">
-                                    <span class="grade-badge grade-b">B</span>
-                                    <div class="course-percentage">85%</div>
-                                </div>
-                            </div>
-                            <div class="progress custom-course-progress mb-2">
-                                <div class="progress-bar bg-info" 
-                                    role="progressbar" 
-                                    style="width: 85%" 
-                                    aria-valuenow="85" 
-                                    aria-valuemin="0" 
-                                    aria-valuemax="100">
-                                </div>
-                            </div>
-                            <div class="d-flex justify-content-between">
-                                <small class="text-muted">10/12 modules completed</small>
-                                <small class="text-info">Next: Midterm Exam</small>
-                            </div>
-                        </div>
-
-                            <!-- Course Item 4 -->
-                            <div class="course-item mb-3">
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <div class="d-flex align-items-center">
-                                        <div class="course-icon me-3">
-                                            <i class="fas fa-mobile-alt"></i>
-                                        </div>
-                                        <div>
-                                            <h6 class="mb-1">Mobile App Design</h6>
-                                            <small class="text-muted">DES-302 • Prof. Davis</small>
-                                        </div>
-                                    </div>
-                                    <div class="text-end">
-                                        <span class="grade-badge grade-c">B-</span>
-                                        <div class="course-percentage">68%</div>
-                                    </div>
-                                </div>
-                                <div class="progress custom-course-progress mb-2">
-                                    <div class="progress-bar bg-warning" 
-                                        role="progressbar" 
-                                        style="width: 68%" 
-                                        aria-valuenow="68" 
-                                        aria-valuemin="0" 
-                                        aria-valuemax="100">
-                                    </div>
-                                </div>
-                                <div class="d-flex justify-content-between">
-                                    <small class="text-muted">8/12 modules completed</small>
-                                    <small class="text-danger">Overdue: Quiz 4</small>
-                                </div>
-                            </div>
-
-                            <!-- Course Item 5 (Additional for scrolling demo) -->
-                            <div class="course-item mb-3">
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <div class="d-flex align-items-center">
-                                        <div class="course-icon me-3">
-                                            <i class="fas fa-brain"></i>
-                                        </div>
-                                        <div>
-                                            <h6 class="mb-1">Machine Learning</h6>
-                                            <small class="text-muted">CS-501 • Prof. Anderson</small>
-                                        </div>
-                                    </div>
-                                    <div class="text-end">
-                                        <span class="grade-badge grade-a">A-</span>
-                                        <div class="course-percentage">89%</div>
-                                    </div>
-                                </div>
-                                <div class="progress custom-course-progress mb-2">
-                                    <div class="progress-bar bg-success" 
-                                        role="progressbar" 
-                                        style="width: 89%" 
-                                        aria-valuenow="89" 
-                                        aria-valuemin="0" 
-                                        aria-valuemax="100">
-                                    </div>
-                                </div>
-                                <div class="d-flex justify-content-between">
-                                    <small class="text-muted">11/13 modules completed</small>
-                                    <small class="text-success">Next: Research Project</small>
-                                </div>
-                            </div>
-
-                            <!-- Course Item 6 (Additional for scrolling demo) -->
-                            <div class="course-item mb-3">
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <div class="d-flex align-items-center">
-                                        <div class="course-icon me-3">
-                                            <i class="fas fa-shield-alt"></i>
-                                        </div>
-                                        <div>
-                                            <h6 class="mb-1">Cybersecurity</h6>
-                                            <small class="text-muted">CS-420 • Prof. Miller</small>
-                                        </div>
-                                    </div>
-                                    <div class="text-end">
-                                        <span class="grade-badge grade-b">B+</span>
-                                        <div class="course-percentage">76%</div>
-                                    </div>
-                                </div>
-                                <div class="progress custom-course-progress mb-2">
-                                    <div class="progress-bar bg-danger" 
-                                        role="progressbar" 
-                                        style="width: 76%" 
-                                        aria-valuenow="76" 
-                                        aria-valuemin="0" 
-                                        aria-valuemax="100">
-                                    </div>
-                                </div>
-                                <div class="d-flex justify-content-between">
-                                    <small class="text-muted">9/12 modules completed</small>
-                                    <small class="text-info">Next: Security Audit</small>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Overall Summary (Fixed at bottom) -->
+                        <!-- Overall Summary -->
                         <div class="course-summary mt-3 pt-3 border-top">
                             <div class="row text-center d-flex gap-0">
                                 <div class="col-4 m-0">
-                                    <div class="fw-bold text-primary fs-6">3.4</div>
-                                    <small class="text-muted">Overall GPA</small>
+                                    <div class="fw-bold text-primary fs-6"><?php echo number_format($first_sem_stats['gpa'], 2); ?></div>
+                                    <small class="text-muted">GPA</small>
                                 </div>
                                 <div class="col-4 m-0">
-                                    <div class="fw-bold text-success fs-6">81%</div>
-                                    <small class="text-muted">Avg Progress</small>
+                                    <div class="fw-bold text-success fs-6"><?php echo number_format($first_sem_stats['avg_score'], 1); ?>%</div>
+                                    <small class="text-muted">Avg Score</small>
                                 </div>
                                 <div class="col-4 m-0">
-                                    <div class="fw-bold text-warning fs-6">2</div>
-                                    <small class="text-muted">Pending Tasks</small>
+                                    <div class="fw-bold text-info fs-6"><?php echo $first_sem_stats['graded_courses']; ?>/<?php echo $first_sem_stats['total_courses']; ?></div>
+                                    <small class="text-muted">Graded</small>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-                <!-- Course Progress Card -->
-                <div class="col-lg-12 d-grid row-gap-3 py-2">
+
+                <!-- Second Semester Results Card -->
+                <div class="col-lg-6 d-grid row-gap-3 py-2">
                     <div class="chart-container course-progress-container m-0">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h5 class="mb-0">Second Semester Results</h5>
-                            <span class="badge bg-primary">4 Active Courses</span>
+                            <span class="badge bg-secondary"><?php echo $second_sem_stats['total_courses']; ?> Courses</span>
                         </div>
                         
-                        <!-- Scrollable Course List -->
+                        <!-- Scrollable Results List -->
                         <div class="courses-scroll-container">
-                            <!-- Course Item 1 -->
-                            <div class="course-item mb-3">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <div class="d-flex align-items-center">
-                                    <div class="course-icon me-3">
-                                        <i class="fas fa-laptop-code"></i>
+                            <?php if (!empty($second_semester_results)): ?>
+                                <?php foreach ($second_semester_results as $result): ?>
+                                    <div class="course-item mb-3">
+                                        <div class="d-flex justify-content-between align-items-start mb-2">
+                                            <div class="d-flex align-items-center">
+                                                <div class="course-icon me-3">
+                                                    <i class="fas fa-chart-bar"></i>
+                                                </div>
+                                                <div>
+                                                    <h6 class="mb-1"><?php echo htmlspecialchars($result['name']); ?></h6>
+                                                    <small class="text-muted"><?php echo htmlspecialchars($result['code']); ?> • <?php echo $result['credit_hours']; ?> Credits</small>
+                                                </div>
+                                            </div>
+                                            <div class="text-end">
+                                                <span class="grade-badge grade-<?php echo strtolower($result['letter_grade']); ?>">
+                                                    <?php echo $result['letter_grade']; ?>
+                                                </span>
+                                                <div class="course-percentage"><?php echo $result['total_score'] ?? 'N/A'; ?>%</div>
+                                            </div>
+                                        </div>
+                                        
+                                        <?php if ($result['total_score']): ?>
+                                            <div class="progress custom-course-progress mb-2">
+                                                <div class="progress-bar <?php echo $result['total_score'] >= 70 ? 'bg-success' : ($result['total_score'] >= 60 ? 'bg-warning' : 'bg-danger'); ?>" 
+                                                    role="progressbar" 
+                                                    style="width: <?php echo min($result['total_score'], 100); ?>%" 
+                                                    aria-valuenow="<?php echo $result['total_score']; ?>" 
+                                                    aria-valuemin="0" 
+                                                    aria-valuemax="100">
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="row mb-2">
+                                                <div class="col-6">
+                                                    <small class="text-muted">CA: <?php echo $result['ca_mark'] ?? 'N/A'; ?>%</small>
+                                                </div>
+                                                <div class="col-6">
+                                                    <small class="text-muted">Exam: <?php echo $result['exam_mark'] ?? 'N/A'; ?>%</small>
+                                                </div>
+                                            </div>
+                                        <?php endif; ?>
+                                        
+                                        <div class="d-flex justify-content-between">
+                                            <small class="text-muted">
+                                                <?php echo $result['exam_type'] ?? 'Final'; ?> Exam
+                                            </small>
+                                            <small class="<?php echo ($result['total_score'] ?? 0) >= 70 ? 'text-success' : (($result['total_score'] ?? 0) >= 60 ? 'text-warning' : 'text-danger'); ?>">
+                                                <?php 
+                                                if ($result['total_score']) {
+                                                    echo $result['total_score'] >= 70 ? 'Passed' : ($result['total_score'] >= 60 ? 'Needs Improvement' : 'Failed');
+                                                } else {
+                                                    echo 'Pending';
+                                                }
+                                                ?>
+                                            </small>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <h6 class="mb-1">Web Development</h6>
-                                        <small class="text-muted">CS-301 • Prof. Johnson</small>
-                                    </div>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <div class="text-center py-4">
+                                    <i class="fas fa-chart-bar fa-3x text-muted mb-3"></i>
+                                    <p class="text-muted">No exam results available for second semester</p>
                                 </div>
-                                <div class="text-end">
-                                    <span class="grade-badge grade-a">A</span>
-                                    <div class="course-percentage">92%</div>
-                                </div>
-                            </div>
-                            <div class="progress custom-course-progress mb-2">
-                                <div class="progress-bar bg-success" 
-                                    role="progressbar" 
-                                    style="width: 92%" 
-                                    aria-valuenow="92" 
-                                    aria-valuemin="0" 
-                                    aria-valuemax="100">
-                                </div>
-                            </div>
-                            <div class="d-flex justify-content-between">
-                                <small class="text-muted">12/13 modules completed</small>
-                                <small class="text-success">Next: Final Project</small>
-                            </div>
+                            <?php endif; ?>
                         </div>
 
-                        <!-- Course Item 2 -->
-                        <div class="course-item mb-4">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <div class="d-flex align-items-center">
-                                    <div class="course-icon me-3">
-                                        <i class="fas fa-database"></i>
-                                    </div>
-                                    <div>
-                                        <h6 class="mb-1">Database Systems</h6>
-                                        <small class="text-muted">CS-205 • Prof. Smith</small>
-                                    </div>
-                                </div>
-                                <div class="text-end">
-                                    <span class="grade-badge grade-b">B+</span>
-                                    <div class="course-percentage">78%</div>
-                                </div>
-                            </div>
-                            <div class="progress custom-course-progress mb-2">
-                                <div class="progress-bar bg-primary" 
-                                    role="progressbar" 
-                                    style="width: 78%" 
-                                    aria-valuenow="78" 
-                                    aria-valuemin="0" 
-                                    aria-valuemax="100">
-                                </div>
-                            </div>
-                            <div class="d-flex justify-content-between">
-                                <small class="text-muted">9/12 modules completed</small>
-                                <small class="text-warning">Due: Assignment 3</small>
-                            </div>
-                        </div>
-
-                        <!-- Course Item 3 -->
-                        <div class="course-item mb-4">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <div class="d-flex align-items-center">
-                                    <div class="course-icon me-3">
-                                        <i class="fas fa-chart-line"></i>
-                                    </div>
-                                    <div>
-                                        <h6 class="mb-1">Data Analytics</h6>
-                                        <small class="text-muted">MATH-401 • Prof. Wilson</small>
-                                    </div>
-                                </div>
-                                <div class="text-end">
-                                    <span class="grade-badge grade-b">B</span>
-                                    <div class="course-percentage">85%</div>
-                                </div>
-                            </div>
-                            <div class="progress custom-course-progress mb-2">
-                                <div class="progress-bar bg-info" 
-                                    role="progressbar" 
-                                    style="width: 85%" 
-                                    aria-valuenow="85" 
-                                    aria-valuemin="0" 
-                                    aria-valuemax="100">
-                                </div>
-                            </div>
-                            <div class="d-flex justify-content-between">
-                                <small class="text-muted">10/12 modules completed</small>
-                                <small class="text-info">Next: Midterm Exam</small>
-                            </div>
-                        </div>
-
-                            <!-- Course Item 4 -->
-                            <div class="course-item mb-3">
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <div class="d-flex align-items-center">
-                                        <div class="course-icon me-3">
-                                            <i class="fas fa-mobile-alt"></i>
-                                        </div>
-                                        <div>
-                                            <h6 class="mb-1">Mobile App Design</h6>
-                                            <small class="text-muted">DES-302 • Prof. Davis</small>
-                                        </div>
-                                    </div>
-                                    <div class="text-end">
-                                        <span class="grade-badge grade-c">B-</span>
-                                        <div class="course-percentage">68%</div>
-                                    </div>
-                                </div>
-                                <div class="progress custom-course-progress mb-2">
-                                    <div class="progress-bar bg-warning" 
-                                        role="progressbar" 
-                                        style="width: 68%" 
-                                        aria-valuenow="68" 
-                                        aria-valuemin="0" 
-                                        aria-valuemax="100">
-                                    </div>
-                                </div>
-                                <div class="d-flex justify-content-between">
-                                    <small class="text-muted">8/12 modules completed</small>
-                                    <small class="text-danger">Overdue: Quiz 4</small>
-                                </div>
-                            </div>
-
-                            <!-- Course Item 5 (Additional for scrolling demo) -->
-                            <div class="course-item mb-3">
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <div class="d-flex align-items-center">
-                                        <div class="course-icon me-3">
-                                            <i class="fas fa-brain"></i>
-                                        </div>
-                                        <div>
-                                            <h6 class="mb-1">Machine Learning</h6>
-                                            <small class="text-muted">CS-501 • Prof. Anderson</small>
-                                        </div>
-                                    </div>
-                                    <div class="text-end">
-                                        <span class="grade-badge grade-a">A-</span>
-                                        <div class="course-percentage">89%</div>
-                                    </div>
-                                </div>
-                                <div class="progress custom-course-progress mb-2">
-                                    <div class="progress-bar bg-success" 
-                                        role="progressbar" 
-                                        style="width: 89%" 
-                                        aria-valuenow="89" 
-                                        aria-valuemin="0" 
-                                        aria-valuemax="100">
-                                    </div>
-                                </div>
-                                <div class="d-flex justify-content-between">
-                                    <small class="text-muted">11/13 modules completed</small>
-                                    <small class="text-success">Next: Research Project</small>
-                                </div>
-                            </div>
-
-                            <!-- Course Item 6 (Additional for scrolling demo) -->
-                            <div class="course-item mb-3">
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <div class="d-flex align-items-center">
-                                        <div class="course-icon me-3">
-                                            <i class="fas fa-shield-alt"></i>
-                                        </div>
-                                        <div>
-                                            <h6 class="mb-1">Cybersecurity</h6>
-                                            <small class="text-muted">CS-420 • Prof. Miller</small>
-                                        </div>
-                                    </div>
-                                    <div class="text-end">
-                                        <span class="grade-badge grade-b">B+</span>
-                                        <div class="course-percentage">76%</div>
-                                    </div>
-                                </div>
-                                <div class="progress custom-course-progress mb-2">
-                                    <div class="progress-bar bg-danger" 
-                                        role="progressbar" 
-                                        style="width: 76%" 
-                                        aria-valuenow="76" 
-                                        aria-valuemin="0" 
-                                        aria-valuemax="100">
-                                    </div>
-                                </div>
-                                <div class="d-flex justify-content-between">
-                                    <small class="text-muted">9/12 modules completed</small>
-                                    <small class="text-info">Next: Security Audit</small>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Overall Summary (Fixed at bottom) -->
+                        <!-- Overall Summary -->
                         <div class="course-summary mt-3 pt-3 border-top">
                             <div class="row text-center d-flex gap-0">
                                 <div class="col-4 m-0">
-                                    <div class="fw-bold text-primary fs-6">3.4</div>
-                                    <small class="text-muted">Overall GPA</small>
+                                    <div class="fw-bold text-primary fs-6"><?php echo number_format($second_sem_stats['gpa'], 2); ?></div>
+                                    <small class="text-muted">GPA</small>
                                 </div>
                                 <div class="col-4 m-0">
-                                    <div class="fw-bold text-success fs-6">81%</div>
-                                    <small class="text-muted">Avg Progress</small>
+                                    <div class="fw-bold text-success fs-6"><?php echo number_format($second_sem_stats['avg_score'], 1); ?>%</div>
+                                    <small class="text-muted">Avg Score</small>
                                 </div>
                                 <div class="col-4 m-0">
-                                    <div class="fw-bold text-warning fs-6">2</div>
-                                    <small class="text-muted">Pending Tasks</small>
+                                    <div class="fw-bold text-info fs-6"><?php echo $second_sem_stats['graded_courses']; ?>/<?php echo $second_sem_stats['total_courses']; ?></div>
+                                    <small class="text-muted">Graded</small>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-                
               </div>
           </div>
         </div>
     </main>
 
+    <!-- Logout Modal -->
+    <div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="logoutModalLabel">Confirm Logout</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Are you sure you want to logout?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <a href="logout.php" class="btn btn-danger">Logout</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="assets/bootstrap-5.3.3/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script>
         // Mobile menu toggle
         const mobileToggle = document.getElementById('mobileToggle');
         const sidebar = document.getElementById('sidebar');
         const sidebarOverlay = document.getElementById('sidebarOverlay');
-        const mainContent = document.getElementById('mainContent');
 
         mobileToggle.addEventListener('click', function() {
             sidebar.classList.toggle('show');
@@ -543,73 +400,12 @@
             sidebarOverlay.classList.remove('show');
         });
 
-        // Revenue Chart
-        const revenueCtx = document.getElementById('revenueChart').getContext('2d');
-        new Chart(revenueCtx, {
-            type: 'bar',
-            data: {
-                labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
-                datasets: [{
-                    label: '2021',
-                    data: [18, 7, 15, 29, 18, 12, 9],
-                    backgroundColor: '#6c5ce7',
-                    borderRadius: 8,
-                    maxBarThickness: 20
-                }, {
-                    label: '2020',
-                    data: [-12, -19, -3, -17, -28, -24, -20],
-                    backgroundColor: '#74b9ff',
-                    borderRadius: 8,
-                    maxBarThickness: 20
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: 'bottom'
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: {
-                            display: true
-                        }
-                    },
-                    x: {
-                        grid: {
-                            display: false
-                        }
-                    }
-                }
-            }
-        });
-
-        // Growth Circular Chart
-        const growthCtx = document.getElementById('growthChart').getContext('2d');
-        new Chart(growthCtx, {
-            type: 'doughnut',
-            data: {
-                datasets: [{
-                    data: [78, 22],
-                    backgroundColor: ['#6c5ce7', '#e0e6ed'],
-                    borderWidth: 0,
-                    cutout: '80%'
-                }]
-            },
-            options: {
-                responsive: false,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                }
-            }
-        });
+        // Show logout modal
+        function showLogoutModal() {
+            const logoutModal = new bootstrap.Modal(document.getElementById('logoutModal'));
+            logoutModal.show();
+        }
     </script>
 </body>
 </html>
+

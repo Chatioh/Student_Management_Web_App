@@ -4,7 +4,7 @@ session_start();
  
 // Check if the user is already logged in, if yes then redirect him to index page
 if(isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true){
-    header("location: StudentDashboard/home.php");
+    header("location: AdminDashboard/dashboard.php");
     exit;
 }
  
@@ -35,7 +35,7 @@ if($_SERVER["REQUEST_METHOD"] == "POST"){
     // Validate credentials
     if(empty($email_err) && empty($password_err)){
         // Prepare a select statement
-        $sql = "SELECT id, email, password, full_name FROM students WHERE email = ?";
+        $sql = "SELECT id, email, password FROM admin WHERE email = ?";
         
         if($stmt = mysqli_prepare($link, $sql)){
             // Bind variables to the prepared statement as parameters
@@ -52,7 +52,7 @@ if($_SERVER["REQUEST_METHOD"] == "POST"){
                 // Check if email exists, if yes then verify password
                 if(mysqli_stmt_num_rows($stmt) == 1){                    
                     // Bind result variables
-                    mysqli_stmt_bind_result($stmt, $id, $email, $hashed_password, $full_name);
+                    mysqli_stmt_bind_result($stmt, $id, $email, $hashed_password);
                     if(mysqli_stmt_fetch($stmt)){
                         if(password_verify($password, $hashed_password)){
                             // Password is correct, so start a new session
@@ -60,13 +60,19 @@ if($_SERVER["REQUEST_METHOD"] == "POST"){
                             
                             // Store data in session variables
                             $_SESSION["loggedin"] = true;
-                            $_SESSION["student_id"] = $id;
-                            $_SESSION["email"] = $email;
-                            $_SESSION["full_name"] = $full_name;  
-                            $_SESSION["matricule"] = $matricule;               
+                            $_SESSION["id"] = $id;
+                            $_SESSION["email"] = $email;                            
+                            
+                            //selecting email and phonenumber from database to create its session variable
+                            $sql = "SELECT * FROM admin WHERE id = $id";
+                            $result = $link->query($sql);
+                            $row = $result->fetch_assoc();
+                            $_SESSION["full_name"] = $row['full_name']; 
+                            $_SESSION["email"] = $row['email']; 
+                            $_SESSION["phone_number"] = $row['phone_number']; 
 
                             // Redirect user to index page
-                            header("location: StudentDashboard/home.php");
+                            header("location: AdminDashboard/dashboard.php");
                         } else{
                             // Password is not valid, display a generic error message
                             $login_err = "Invalid email or password.";
@@ -88,11 +94,6 @@ if($_SERVER["REQUEST_METHOD"] == "POST"){
     // Close connection
     mysqli_close($link);
 }
-// Check for registration success message from register.php
-if(isset($_SESSION["registration_success"])) {
-    $_SESSION["display_message"] = $_SESSION["registration_success"];
-    unset($_SESSION["registration_success"]);
-}
 ?>
 
 <!DOCTYPE html>
@@ -100,12 +101,12 @@ if(isset($_SESSION["registration_success"])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Welcome to SMA!</title>
+    <title>Admin Login</title>
     <link rel="stylesheet" href="assets/css/register-login.css">
     <!-- Bootstrap CSS -->
     <link rel="stylesheet" href="assets/vendor/bootstrap/css/bootstrap.min.css">
     <!-- Bootstrap Icons -->
-    <link href="assets/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css" rel="stylesheet">
 </head>
 <body>
     <div class="main-container">
@@ -117,8 +118,8 @@ if(isset($_SESSION["registration_success"])) {
                     <div class="text-center text-white">
                         <a href="index.php" class="logo"><img class="pb-2" src="assets/images/b2bblue.svg" alt="" width="110px" height="auto"></a>
                         <br><br>
-                        <h1 class="carousel-title">Welcome to SMA!</h1>
-                        <p class="carousel-text">A platform that brings students and the school close together.</p>
+                        <h1 class="carousel-title">Welcome to SMA Admin!</h1>
+                        <p class="carousel-text">The dashboard that brings manages students.</p>
                     </div> 
                 </div>
             </div>
@@ -160,7 +161,7 @@ if(isset($_SESSION["registration_success"])) {
                         </button>
                     </div> -->
                     <div class="signin-link mb-4">
-                        Don't have account? <a href="register.php">Sign Up</a>
+                        Don't have account? <a href="admin_register.php">Sign Up</a>
                     </div>
                 </div>
             </div>
@@ -168,7 +169,7 @@ if(isset($_SESSION["registration_success"])) {
     </div>
     
     <!-- Bootstrap JS -->
-    <script src="assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/bootstrap-5.3.3-dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Manual carousel implementation
         document.addEventListener('DOMContentLoaded', function() {

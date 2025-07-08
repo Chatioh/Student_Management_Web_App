@@ -1,6 +1,112 @@
 <?php
 session_start();
 
+require_once "config.php"; // Adjust path if necessary
+
+// Check if the user is logged in, if not then redirect to login page
+if(!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true){
+    header("location: ../login.php"); // Adjust path if necessary
+    exit;
+}
+
+$student_id = $_SESSION["student_id"];
+$student_data = [];
+$sql = "SELECT 
+            s.full_name, s.matricule, s.email, s.phone_number, 
+            sch.name AS school_name, d.name AS department_name
+        FROM 
+            students s
+        LEFT JOIN 
+            schools sch ON s.school_id = sch.id
+        LEFT JOIN 
+            departments d ON s.department_name = d.id
+        WHERE 
+            s.id = ?";
+
+if ($stmt = mysqli_prepare($link, $sql)) {
+    mysqli_stmt_bind_param($stmt, "i", $student_id);
+    if (mysqli_stmt_execute($stmt)) {
+        $result = mysqli_stmt_get_result($stmt);
+        if (mysqli_num_rows($result) == 1) {
+            $student_data = mysqli_fetch_assoc($result);
+        } else {
+            // Handle case where student data is not found (shouldn't happen if logged in)
+            echo "Error: Student data not found.";
+            exit();
+        }
+    } else {
+        echo "Oops! Something went wrong. Please try again later.";
+        exit();
+    }
+    mysqli_stmt_close($stmt);
+}
+
+// Get student statistics
+$stats = [];
+
+// Get total enrolled courses
+$sql = "SELECT COUNT(*) as total_courses FROM enrollments WHERE student_id = ?";
+if ($stmt = mysqli_prepare($link, $sql)) {
+    mysqli_stmt_bind_param($stmt, "i", $student_id);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    $stats['total_courses'] = mysqli_fetch_assoc($result)['total_courses'];
+    mysqli_stmt_close($stmt);
+}
+
+// Get total credit hours
+$sql = "SELECT SUM(c.credit_hours) as total_credits 
+        FROM enrollments e 
+        JOIN courses c ON e.course_id = c.id 
+        WHERE e.student_id = ?";
+if ($stmt = mysqli_prepare($link, $sql)) {
+    mysqli_stmt_bind_param($stmt, "i", $student_id);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    $stats['total_credits'] = mysqli_fetch_assoc($result)['total_credits'] ?? 0;
+    mysqli_stmt_close($stmt);
+}
+
+// Get average grade
+$sql = "SELECT AVG(er.total_score) as avg_grade 
+        FROM exam_results er 
+        JOIN enrollments e ON er.enrollment_id = e.id 
+        WHERE e.student_id = ?";
+if ($stmt = mysqli_prepare($link, $sql)) {
+    mysqli_stmt_bind_param($stmt, "i", $student_id);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    $stats['avg_grade'] = mysqli_fetch_assoc($result)['avg_grade'] ?? 0;
+    mysqli_stmt_close($stmt);
+}
+
+// Get unread notifications count
+$sql = "SELECT COUNT(*) as unread_notifications FROM notifications WHERE student_id = ? AND is_read = 0";
+if ($stmt = mysqli_prepare($link, $sql)) {
+    mysqli_stmt_bind_param($stmt, "i", $student_id);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    $stats['unread_notifications'] = mysqli_fetch_assoc($result)['unread_notifications'];
+    mysqli_stmt_close($stmt);
+}
+
+// Get semester-wise course distribution
+$sql = "SELECT c.semester, COUNT(*) as course_count 
+        FROM enrollments e 
+        JOIN courses c ON e.course_id = c.id 
+        WHERE e.student_id = ? 
+        GROUP BY c.semester";
+$semester_courses = [];
+if ($stmt = mysqli_prepare($link, $sql)) {
+    mysqli_stmt_bind_param($stmt, "i", $student_id);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    while ($row = mysqli_fetch_assoc($result)) {
+        $semester_courses[$row['semester']] = $row['course_count'];
+    }
+    mysqli_stmt_close($stmt);
+}
+
 $display_message = "";
 if (isset($_SESSION["display_message"])) {
     $display_message = $_SESSION["display_message"];
@@ -44,7 +150,7 @@ if (isset($_SESSION["display_message"])) {
                 Exam Results 
                 <i class="fas fa-chevron-right ms-auto"></i>
             </a>
-            <a href="" class="nav-link">
+            <a href="notifications.php" class="nav-link">
                 <i class="fas fa-bell"></i>
                 Notifications 
                 <i class="fas fa-chevron-right ms-auto"></i>
@@ -58,9 +164,14 @@ if (isset($_SESSION["display_message"])) {
                 Settings
                 <i class="fas fa-chevron-right ms-auto"></i>
             </a>
-            <a href="#" class="nav-link">
+            <a href="profile.php" class="nav-link">
                 <i class="fas fa-user-alt"></i>
                 Profile
+                <i class="fas fa-chevron-right ms-auto"></i>
+            </a>
+            <a href="#" class="nav-link" onclick="showLogoutModal()">
+                <i class="fas fa-sign-out-alt"></i>
+                Logout
                 <i class="fas fa-chevron-right ms-auto"></i>
             </a>
         </div>
@@ -80,7 +191,7 @@ if (isset($_SESSION["display_message"])) {
                           <i class="fas fa-search"></i>
                           <input type="text" class="form-control" placeholder="Search...">
                       </div>
-                      <div class="user-avatar ms-2">J</div>
+                      <div class="user-avatar ms-2"><?php echo strtoupper(substr($student_data["full_name"], 0, 1)); ?></div>
                   </div>
               </div>
               <?php if (!empty($display_message)): ?>
@@ -94,8 +205,9 @@ if (isset($_SESSION["display_message"])) {
               <div class="welcome-card">
                   <div class="row align-items-center">
                       <div class="col-md-8">
-                          <h2 class="mb-3">Congratulations John! 🎉</h2>
-                          <p class="mb-3">You have done 72% more excercises today. Check your new badge in your profile.</p>
+                          <h2 class="mb-3">Welcome, <?php echo htmlspecialchars($student_data["full_name"]); ?>! 🎉</h2>
+                          <p class="mb-3">Matricule: <?php echo htmlspecialchars($student_data["matricule"]); ?></p>
+                          <p class="mb-3">Department: <?php echo htmlspecialchars($student_data["department_name"]); ?></p> 
                           <button class="btn btn-light">View Badges</button>
                       </div>
                       <div class="col-md-4">
@@ -112,45 +224,47 @@ if (isset($_SESSION["display_message"])) {
               <div class="stats-grid">
                   <div class="stat-card">
                       <div class="stat-icon" style="background-color: rgba(108, 92, 231, 0.1); color: var(--primary-color);">
-                          <i class="fas fa-clock"></i>
+                          <i class="fas fa-book"></i>
                       </div>
-                      <div class="stat-value">$12,628</div>
-                      <div class="stat-label">Profit</div>
+                      <div class="stat-value"><?php echo $stats['total_courses']; ?></div>
+                      <div class="stat-label">Enrolled Courses</div>
                       <div class="stat-change positive">
-                          <i class="fas fa-arrow-up"></i> +72.80%
+                          <i class="fas fa-arrow-up"></i> Active
                       </div>
                   </div>
 
                   <div class="stat-card">
                       <div class="stat-icon" style="background-color: rgba(0, 184, 148, 0.1); color: var(--success-color);">
-                          <i class="fas fa-shopping-cart"></i>
+                          <i class="fas fa-graduation-cap"></i>
                       </div>
-                      <div class="stat-value">$4,679</div>
-                      <div class="stat-label">Sales</div>
+                      <div class="stat-value"><?php echo $stats['total_credits']; ?></div>
+                      <div class="stat-label">Credit Hours</div>
                       <div class="stat-change positive">
-                          <i class="fas fa-arrow-up"></i> +28.42%
+                          <i class="fas fa-arrow-up"></i> Total Credits
                       </div>
                   </div>
 
                   <div class="stat-card">
                       <div class="stat-icon" style="background-color: rgba(231, 76, 60, 0.1); color: var(--danger-color);">
-                          <i class="fab fa-paypal"></i>
+                          <i class="fas fa-bell"></i>
                       </div>
-                      <div class="stat-value">$2,456</div>
-                      <div class="stat-label">Payments</div>
-                      <div class="stat-change negative">
-                          <i class="fas fa-arrow-down"></i> -14.82%
+                      <div class="stat-value"><?php echo $stats['unread_notifications']; ?></div>
+                      <div class="stat-label">Notifications</div>
+                      <div class="stat-change <?php echo $stats['unread_notifications'] > 0 ? 'negative' : 'positive'; ?>">
+                          <i class="fas fa-<?php echo $stats['unread_notifications'] > 0 ? 'exclamation' : 'check'; ?>"></i> 
+                          <?php echo $stats['unread_notifications'] > 0 ? 'Unread' : 'All Read'; ?>
                       </div>
                   </div>
 
                   <div class="stat-card">
                       <div class="stat-icon" style="background-color: rgba(108, 92, 231, 0.1); color: var(--primary-color);">
-                          <i class="fas fa-credit-card"></i>
+                          <i class="fas fa-chart-line"></i>
                       </div>
-                      <div class="stat-value">$14,857</div>
-                      <div class="stat-label">Transactions</div>
-                      <div class="stat-change positive">
-                          <i class="fas fa-arrow-up"></i> +28.14%
+                      <div class="stat-value"><?php echo number_format($stats['avg_grade'], 1); ?>%</div>
+                      <div class="stat-label">Average Grade</div>
+                      <div class="stat-change <?php echo $stats['avg_grade'] >= 70 ? 'positive' : 'negative'; ?>">
+                          <i class="fas fa-arrow-<?php echo $stats['avg_grade'] >= 70 ? 'up' : 'down'; ?>"></i> 
+                          <?php echo $stats['avg_grade'] >= 70 ? 'Good' : 'Needs Improvement'; ?>
                       </div>
                   </div>
               </div>
@@ -285,6 +399,25 @@ if (isset($_SESSION["display_message"])) {
         </div>
     </main>
 
+    <!-- Logout Modal -->
+    <div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="logoutModalLabel">Confirm Logout</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Are you sure you want to logout?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <a href="logout.php" class="btn btn-danger">Logout</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="assets/bootstrap-5.3.3/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script>
@@ -303,6 +436,12 @@ if (isset($_SESSION["display_message"])) {
             sidebar.classList.remove('show');
             sidebarOverlay.classList.remove('show');
         });
+
+        // Show logout modal
+        function showLogoutModal() {
+            const logoutModal = new bootstrap.Modal(document.getElementById('logoutModal'));
+            logoutModal.show();
+        }
 
         // Revenue Chart
         const revenueCtx = document.getElementById('revenueChart').getContext('2d');
